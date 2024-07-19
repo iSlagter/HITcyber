@@ -12,19 +12,13 @@ body {
     padding-right: 0;
 }
 
-.main-content {
-    margin-left: 220px; /* מרווח מצד שמאל לתוכן הראשי */
-    margin-top: 40px;
-}
 
 .card {
     margin-bottom: 20px;
 }
 
 
-.content {
-    margin-top: 56px; /* מרווח מתחת ל-navbar */
-}
+
 
 .container {
     background: rgba(255, 255, 255, 1); /* צבע רקע לבן עם שקיפות של 80% */

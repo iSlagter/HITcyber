@@ -10,6 +10,11 @@
     <style>
         body {
             background-color: #E0E0F8; /* צבע רקע בגוון סגלגל בהיר אפרפר */
+            display: grid;
+            grid-template-rows: auto 1fr;
+            height: 100vh;
+            margin: 0;
+
         }
         .navbar {
             position: fixed;
@@ -28,11 +33,7 @@
             overflow-x: hidden;
             overflow-y: auto;
         }
-        .main-content {
-            margin-left: 10px; /* מרחק מה-sidebar */
-            margin-right: 10px; /* מרחק מהקצה הימני של הדף */
-            max-width: 82%;
-        }
+      
         .container {
             background: rgba(255, 255, 255, 1); /* צבע רקע לבן עם שקיפות של 80% */
             border-radius: 10px;
@@ -147,6 +148,24 @@
             $('#customerTable').DataTable();
         });
 
+        function adjustMainContentWidth() {
+            var sidebarWidth = document.querySelector('.sidebar-sticky').offsetWidth;
+            var mainContent = document.querySelector('.main-content');
+            var navBarHeight = document.querySelector('#upnav').offsetHeight;
+            var maxSize = document.querySelector('html').offsetWidth;
+            
+            mainContent.style.marginLeft = (sidebarWidth + 20) + 'px';
+            mainContent.style.marginRight = 30 + 'px';
+            mainContent.style.marginTop = navBarHeight + 'px';
+            mainContent.style.marginBottom = '10px';
+            // mainContent.style.width = 'calc(100% - ' + (sidebarWidth+10) + 'px)';
+            // mainContent.style.height = 'calc(100% - ' + (navBarHeight + 20) + 'px)';
+        }
+
+        
+
+        window.addEventListener('resize', adjustMainContentWidth);
+        window.addEventListener('load', adjustMainContentWidth);
         var revenueCtx = document.getElementById('revenueChart').getContext('2d');
         var revenueChart = new Chart(revenueCtx, {
             type: 'line',
