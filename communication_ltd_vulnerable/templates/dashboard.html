@@ -3,53 +3,197 @@
 <head>
     <meta charset="UTF-8">
     <title>Dashboard</title>
+    <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.10.21/css/jquery.dataTables.min.css">
+    <link rel="stylesheet" href="/static/style.css">
     <style>
-        .flash-message {
-            color: green;
-            margin-bottom: 20px;
+        body {
+            background-color: #E0E0F8; /* צבע רקע בגוון סגלגל בהיר אפרפר */
         }
-        table {
+        .navbar {
+            position: fixed;
             width: 100%;
-            border-collapse: collapse;
+            z-index: 1000;
         }
-        table, th, td {
-            border: 1px solid black;
+        .content {
+            margin-top: 0px; /* מרווח מתחת ל-navbar */
         }
-        th, td {
-            padding: 10px;
-            text-align: left;
+        .sidebar-sticky {
+            position: -webkit-sticky;
+            position: sticky;
+            top: 56px; /* מתחת ל-navbar */
+            height: calc(100vh - 56px);
+            padding-top: 0.5rem;
+            overflow-x: hidden;
+            overflow-y: auto;
+        }
+        .main-content {
+            margin-left: 10px; /* מרחק מה-sidebar */
+            margin-right: 10px; /* מרחק מהקצה הימני של הדף */
+            max-width: 82%;
+        }
+        .container {
+            background: rgba(255, 255, 255, 1); /* צבע רקע לבן עם שקיפות של 80% */
+            border-radius: 10px;
+        }
+        .container-content {
+            padding: 20px;
+            margin-top: 20px;
+            background: none; /* תוכן פנימי ללא רקע */
+        }
+        table.dataTable thead th, table.dataTable thead td {
+            border-bottom: 1px solid #ddd; /* Border for table header */
+        }
+        table.dataTable.no-footer {
+            border-bottom: 1px solid #ddd; /* Border for table footer */
+        }
+        table.dataTable, table.dataTable th, table.dataTable td {
+            box-sizing: border-box;
+            border: 1px solid #ddd; /* Border for table */
         }
     </style>
 </head>
 <body>
-    <h2>Dashboard</h2>
-    <div class="flash-messages">
-        {% with messages = get_flashed_messages() %}
-            {% if messages %}
-                <ul>
-                {% for message in messages %}
-                    <li class="flash-message">{{ message }}</li>
-                {% endfor %}
+    <div class="container-fluid">
+        <!-- Navbar -->
+        <nav id="upnav" class="navbar navbar-expand-lg navbar-dark bg-dark">
+            <a class="navbar-brand" href="#">Communication_LTD</a>
+            <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ml-auto">
+                    <span class="navbar-text">
+                        Hello, {{ username }}
+                    </span>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('dashboard') }}">Dashboard</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('logout') }}">Logout</a>
+                    </li>
                 </ul>
-            {% endif %}
-        {% endwith %}
+            </div>
+        </nav>
+        <!-- Sidebar -->
+        <div class="row no-gutters content">
+            <div class="col-md-2 col-xl-2 col-auto bg-light sidebar">
+            <!-- <div class="col-auto col-md-2 col-xl-2 px-sm-2 px-0 bg-dark"> -->
+                <div class="sidebar-sticky">
+                    <ul class="nav flex-column">
+                        <li class="nav-item">
+                            <a class="nav-link" href="{{ url_for('add_customer') }}">
+                                <i class="fas fa-users"></i>
+                                Add Customer
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{{ url_for('change_password') }}">
+                                <i class="fas fa-cogs"></i>
+                                Change Password
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+            <!-- Main Content -->
+            <div class="col-md-10 main-content">
+                <div class="container mt-3">
+                    <div class="container-content">
+                        <h2>Dashboard</h2>
+                        <div class="row mt-4">
+                            <div class="col-md-12">
+                                <table id="customerTable" class="table table-striped">
+                                    <thead>
+                                        <tr>
+                                            <th>First Name</th>
+                                            <th>Last Name</th>
+                                            <th>Address</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for customer in customers %}
+                                        <tr>
+                                            <td>{{ customer[0] }}</td>
+                                            <td>{{ customer[1] }}</td>
+                                            <td>{{ customer[2] }}</td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="row mt-4">
+                            <div class="col-md-6">
+                                <canvas id="revenueChart"></canvas>
+                            </div>
+                            <div class="col-md-6">
+                                <canvas id="visitChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
-    <button onclick="window.location.href='{{ url_for('change_password') }}'">Change Password</button>
-    <button onclick="window.location.href='{{ url_for('add_customer') }}'">Add Customer</button>
-    <h3>Customer List</h3>
-    <table>
-        <tr>
-            <th>First Name</th>
-            <th>Last Name</th>
-            <th>Address</th>
-        </tr>
-        {% for customer in customers %}
-        <tr>
-            <td>{{ customer[0] }}</td>
-            <td>{{ customer[1] }}</td>
-            <td>{{ customer[2] }}</td>
-        </tr>
-        {% endfor %}
-    </table>
+    <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+    <script src="https://cdn.datatables.net/1.10.21/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.9.2/dist/umd/popper.min.js"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        $(document).ready(function() {
+            $('#customerTable').DataTable();
+        });
+
+        var revenueCtx = document.getElementById('revenueChart').getContext('2d');
+        var revenueChart = new Chart(revenueCtx, {
+            type: 'line',
+            data: {
+                labels: ['January', 'February', 'March', 'April', 'May', 'June'],
+                datasets: [{
+                    label: 'Revenue',
+                    data: [3200, 6200, 6300, 14700, 10000, 23000],
+                    backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                    borderColor: 'rgba(75, 192, 192, 1)',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                scales: {
+                    yAxes: [{
+                        ticks: {
+                            beginAtZero: true
+                        }
+                    }]
+                }
+            }
+        });
+
+        var visitCtx = document.getElementById('visitChart').getContext('2d');
+        var visitChart = new Chart(visitCtx, {
+            type: 'bar',
+            data: {
+                labels: ['January', 'February', 'March', 'April', 'May', 'June'],
+                datasets: [{
+                    label: 'New Customers',
+                    data: [3200, 3000, 4000, 4500, 3700, 9000],
+                    backgroundColor: 'rgba(89, 49, 168, 0.4)',
+                    borderColor: 'rgba(153, 102, 255, 1)',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                scales: {
+                    yAxes: [{
+                        ticks: {
+                            beginAtZero: true
+                        }
+                    }]
+                }
+            }
+        });
+    </script>
 </body>
 </html>

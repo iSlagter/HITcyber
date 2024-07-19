@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, render_template, redirect, url_for, session, flash
+from flask import Flask, request, jsonify, render_template, redirect, url_for, session, flash, send_from_directory
 import MySQLdb
 import hashlib
 import os
@@ -80,7 +80,14 @@ def send_reset_email(to_email, reset_token, user_id):
             cursor.close()
     except Exception as e:
         logging.error(f"Failed to send email: {e}")
+
+@app.route('/static/background')
+def static_files(filename):
+    return send_from_directory(app.static_folder, filename)
         
+@app.route('/')
+def default():
+        return redirect(url_for('login'))
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
@@ -115,7 +122,11 @@ def login():
         cursor.execute("SELECT id, password_hash, salt FROM users WHERE username = %s", (username,))
         user = cursor.fetchone()
         
-        if user and hash_password(password, user[2]) == user[1]:
+        if not user:
+            flash("Username does not exist")
+            return redirect(url_for('login'))
+        
+        if hash_password(password, user[2]) == user[1]:
             session['user_id'] = user[0]
             session.pop('login_attempts', None)  # Reset login attempts
             return redirect(url_for('dashboard'))
@@ -123,9 +134,9 @@ def login():
             if 'login_attempts' not in session:
                 session['login_attempts'] = 0
             session['login_attempts'] += 1
-            remaining_attempts = LOGIN_ATTEMPTS - session['login_attempts']
+            remaining_attempts = 3 - session['login_attempts']
             if remaining_attempts > 0:
-                flash(f"Invalid username or password. You have {remaining_attempts} attempts left.")
+                flash(f"Invalid password. You have {remaining_attempts} attempts left.")
             else:
                 flash("You have exceeded the maximum number of login attempts. Please try again later.")
                 session.pop('login_attempts', None)  # Reset after exceeding
@@ -138,11 +149,13 @@ def dashboard():
         return redirect(url_for('login'))
     
     cursor = db.cursor()
+    cursor.execute("SELECT username FROM users WHERE id = %s", (session['user_id'],))
+    username = cursor.fetchone()[0]
     cursor.execute("SELECT first_name, last_name, address FROM customers")
     customers = cursor.fetchall()
     cursor.close()
     
-    return render_template('dashboard.html', customers=customers)
+    return render_template('dashboard.html', customers=customers, username=username)
 
 @app.route('/add_customer', methods=['GET', 'POST'])
 def add_customer():
@@ -262,6 +275,11 @@ def reset_password():
         else:
             flash("User not found")
     return render_template('reset_password.html')
+
+@app.route('/logout')
+def logout():
+    session.pop('user_id', None)
+    return redirect(url_for('login'))
 
 if __name__ == '__main__':
     app.run(debug=True)
