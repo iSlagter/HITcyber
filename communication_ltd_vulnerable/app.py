@@ -1,5 +1,6 @@
 from flask import Flask, request, jsonify, render_template, redirect, url_for, session, flash, send_from_directory
-import MySQLdb
+import mysql.connector
+from dotenv import load_dotenv
 import hashlib
 import os
 from functools import wraps  # ייבוא wraps
@@ -10,21 +11,19 @@ from config import *
 
 logging.basicConfig(level=logging.DEBUG)
 
+load_dotenv()
+
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
 
-db = MySQLdb.connect(
-    host="localhost",
-    user="root",
-    passwd="qwe123",
-    db="communication_ltd"
+cnx = mysql.connector.connect(
+    host="hit-slagter-mysql.mysql.database.azure.com",
+    user=os.getenv('MySQLuser'),
+    passwd=os.getenv('MySQLpasswd'),
+    database="communication_ltd_vulnerable",
+    port=3306,
+    ssl_disabled=True
 )
-
-# def generate_salt():
-#     return ''.join(random.choices(string.ascii_letters + string.digits, k=16))
-
-# def hash_password(password, salt):
-#     return hashlib.sha256((password + salt).encode('utf-8')).hexdigest()
 
 def login_required(f):
     @wraps(f)
@@ -36,7 +35,7 @@ def login_required(f):
     return decorated_function
 
 def is_password_in_history(user_id, password):
-    cursor = db.cursor()
+    cursor = cnx.cursor()
     cursor.execute("SELECT password FROM password_history_vulnerable WHERE user_id = %s ORDER BY change_date DESC LIMIT %s", (user_id, PASSWORD_HISTORY))
     history = cursor.fetchall()
     for old_password_hash in history:
@@ -58,9 +57,9 @@ def send_reset_email(to_email, reset_token, user_id):
             logging.debug("The email was sent successfully.")
         
             # שמירת ה-token במסד הנתונים
-            cursor = db.cursor()
+            cursor = cnx.cursor()
             cursor.execute("INSERT INTO reset_tokens_vulnerable (user_id, token) VALUES (%s, %s)", (user_id, reset_token))
-            db.commit()
+            cnx.commit()
             cursor.close()
     except Exception as e:
         logging.error(f"Failed to send email: {e}")
@@ -72,6 +71,7 @@ def static_files(filename):
 @app.route('/')
 def default():
         return redirect(url_for('login'))
+
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
@@ -87,26 +87,26 @@ def register():
         query_user = f"INSERT INTO users_vulnerable (username, email, password) VALUES ('{username}', '{email}', '{password}')"
         print(f"Constructed query: {query_user}")
 
-        cursor = db.cursor()
+        cursor = cnx.cursor()
         try:
-            cursor.execute(query_user)
-
-            # בדיקה אם יש תוצאה לשאילתה הזדונית
-            while cursor.nextset():
-                result = cursor.fetchall()
-                flash(f"SQL Injection result: {result}", category='danger')
-
-            db.commit()
+            for result in cursor.execute(query_user, multi=True):
+                if result.with_rows:
+                    injection_result = result.fetchall()
+                    flash(f"{injection_result}", category='danger')
+            cnx.commit()
+            
             flash(f"User {username} added successfully! Email: {email}", category='success')
-        except MySQLdb.Error as e:
-            db.rollback()
+        except mysql.connector.Error as e:
+            cnx.rollback()
             flash(f"An error occurred: {e}", 'danger')
             print(f"An error occurred: {e}")  # הדפסת השגיאה לקונסול
         finally:
             cursor.close()
 
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return jsonify({'redirect': url_for('register')})
         return redirect(url_for('register'))
-    return render_template('register.html', password_length=PASSWORD_LENGTH, dictionary=DICTIONARY)
+    return render_template('register.html', password_length=8, dictionary=[])
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -114,25 +114,27 @@ def login():
         username = request.form['username']
         password = request.form['password']
         
-        cursor = db.cursor()
-        cursor.execute(f"SELECT * FROM users_vulnerable WHERE username = '{username}'")
-        logging.debug(f"SELECT * FROM users_vulnerable WHERE username = '{username}'")
+        cursor = cnx.cursor()
+        query = f"SELECT * FROM users_vulnerable WHERE username = '{username}' AND password = '{password}' LIMIT 1"
+        logging.debug(f"Executing query: {query}")
+        
+        cursor.execute(query)
         user = cursor.fetchone()
-        db.commit()
+        
+        # קריאת כל התוצאות שנותרו מהשאילתה הקודמת לפני ביצוע פעולות נוספות
+        while cursor.nextset():
+            try:
+                cursor.fetchall()
+            except mysql.connector.errors.InterfaceError:
+                break
+        
         cursor.close()
         
-        logging.debug(f"User fetched from database: {user}")
-
-        if user is None:
-            flash("Username does not exist", 'danger')
-            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-                return jsonify({'redirect': url_for('login')})
-            return redirect(url_for('login'))
-        
-        if password == user[3]:
+        if user:
             session['user_id'] = user[0]
-            session['username'] = username
+            session['username'] = user[1]
             session.pop('login_attempts', None)  # Reset login attempts
+            
             if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
                 return jsonify({'redirect': url_for('dashboard')})
             return redirect(url_for('dashboard'))
@@ -142,18 +144,21 @@ def login():
             session['login_attempts'] += 1
             remaining_attempts = 3 - session['login_attempts']
             if remaining_attempts > 0:
-                flash(f"Invalid password. You have {remaining_attempts} attempts left.", 'danger')
+                flash(f"Invalid password. You have {remaining_attempts} attempts left.", category='danger')
             else:
                 flash("You have exceeded the maximum number of login attempts. Please try again later.", 'danger')
                 session.pop('login_attempts', None)  # Reset after exceeding
+            
             if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
                 return jsonify({'redirect': url_for('login')})
             return redirect(url_for('login'))
     return render_template('login.html')
+
+
 @app.route('/dashboard')
 def dashboard():
     user_id = session.get('user_id')
-    cursor = db.cursor()
+    cursor = cnx.cursor()
     
     cursor.execute(f"SELECT username FROM users_vulnerable WHERE id = '{user_id}'")
     result = cursor.fetchone()
@@ -167,11 +172,16 @@ def dashboard():
     
     cursor.execute("SELECT first_name, last_name, address FROM customers_vulnerable")
     customers = cursor.fetchall()
-    db.commit()
+    # קריאת כל התוצאות שנותרו מהשאילתה הקודמת לפני ביצוע פעולות נוספות
+    while cursor.nextset():
+        try:
+            cursor.fetchall()
+        except mysql.connector.errors.InterfaceError:
+            break
+    
     cursor.close()
 
     return render_template('dashboard.html', customers=customers, username=session['username'] )
-
 
 
 @app.route('/add_customer', methods=['GET', 'POST'])
@@ -189,18 +199,17 @@ def add_customer():
         query = f"INSERT INTO customers_vulnerable (first_name, last_name, address) VALUES ('{first_name}', '{last_name}', '{address}')"
         print(f"Constructed query: {query}")  
 
-        cursor = db.cursor()
+        cursor = cnx.cursor()
         try:
-            cursor.execute(query)
-            # בדיקה אם יש תוצאה לשאילתה הזדונית
-            while cursor.nextset():
-                result = cursor.fetchall()
-                # flash(Markup(f"SQL Injection result: {result}"), 'danger')
+            for result in cursor.execute(query, multi=True):
+                if result.with_rows:
+                    injection_result = result.fetchall()
+                    flash(f"{injection_result}", category='danger')
+            cnx.commit()
 
-            db.commit()
             flash(f"Customer added successfully! First Name: {first_name}, Last Name: {last_name}, Address: {address}", 'success')
-        except MySQLdb.Error as e:
-            db.rollback()
+        except mysql.connector.Error as e:
+            cnx.rollback()
             flash(f"An error occurred: {e}", 'danger')
             print(f"An error occurred: {e}")  # הדפסת השגיאה לקונסול
         finally:
@@ -214,10 +223,10 @@ def add_customer():
     #     last_name = request.form['last_name']
     #     address = request.form['address']
         
-    #     cursor = db.cursor()
+    #     cursor = cnx.cursor()
     #     cursor.execute(f"INSERT INTO customers_vulnerable (first_name, last_name, address) VALUES ('{first_name}', '{last_name}', '{address}')")
     #     logging.debug(f"INSERT INTO customers_vulnerable (first_name, last_name, address) VALUES ('{first_name}', '{last_name}', '{address}')")
-    #     db.commit()
+    #     cnx.commit()
     #     cursor.close()
         
     #     return redirect(url_for('dashboard'))
@@ -233,7 +242,7 @@ def change_password():
         current_password = request.form['current_password']
         new_password = request.form['new_password']
         
-        cursor = db.cursor()
+        cursor = cnx.cursor()
         cursor.execute(f"SELECT password FROM users_vulnerable WHERE password = '{current_password}' AND id = '{user_id}'")
         user = cursor.fetchone()
         if not user or (current_password != user[0]):
@@ -250,7 +259,7 @@ def change_password():
 
         cursor.execute("UPDATE users_vulnerable SET password = %s WHERE id = %s", (new_password, user_id))
         cursor.execute("INSERT INTO password_history_vulnerable (user_id, password) VALUES (%s, %s)", (user_id, new_password))
-        db.commit()
+        cnx.commit()
         cursor.close()
 
         flash("Password changed successfully")
@@ -265,10 +274,10 @@ def forgot_password():
     if request.method == 'POST':
         email = request.form['email']
         
-        cursor = db.cursor()
+        cursor = cnx.cursor()
         cursor.execute("SELECT id FROM users_vulnerable WHERE email = %s", (email,))
         user = cursor.fetchone()
-        db.commit()
+        cnx.commit()
         cursor.close()
 
         if user:
@@ -292,7 +301,7 @@ def verify_token():
         email = request.form['email']
         token = request.form['token']
         
-        cursor = db.cursor()
+        cursor = cnx.cursor()
         cursor.execute("""
             SELECT rt.user_id
             FROM reset_tokens_vulnerable rt
@@ -300,7 +309,7 @@ def verify_token():
             WHERE rt.token = %s AND u.email = %s
         """, (token, email))
         result = cursor.fetchone()
-        db.commit()
+        cnx.commit()
         cursor.close()
         
         if result:
@@ -325,7 +334,7 @@ def reset_password():
         user_id = session.get('reset_user_id')
         new_password = request.form['new_password']
         
-        cursor = db.cursor()
+        cursor = cnx.cursor()
         cursor.execute("SELECT password FROM users_vulnerable WHERE id = %s", (user_id,))
         result = cursor.fetchone()
         
@@ -334,7 +343,7 @@ def reset_password():
                 logging.debug("the password is good")
                 cursor.execute("UPDATE users_vulnerable SET password = %s WHERE id = %s", (new_password, user_id))
                 cursor.execute("INSERT INTO password_history_vulnerable (user_id, password) VALUES (%s, %s)", (user_id, new_password))
-                db.commit()
+                cnx.commit()
                 cursor.close()
                 session.pop('reset_user_id', None)
                 flash("Password has been reset successfully, Redirecting you to the login page...", 'success')
@@ -351,7 +360,7 @@ def reset_password():
                     return redirect(url_for('reset_password'))
         else:
             flash("User not found", 'danger')
-            db.commit()
+            cnx.commit()
             cursor.close()
             if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
                 return render_template('reset_password.html')
@@ -369,4 +378,4 @@ def logout():
     return redirect(url_for('login'))
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(host="0.0.0.0", port=80, debug=True)
