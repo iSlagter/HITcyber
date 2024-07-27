@@ -19,6 +19,15 @@ jobs:
         with:
           submodules: true
           lfs: false
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.9'
+      - name: Install dependencies
+        run: |
+          cd communication_ltd_secure
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
       - name: Build And Deploy
         id: builddeploy
         uses: Azure/static-web-apps-deploy@v1
@@ -26,12 +35,9 @@ jobs:
           azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_VICTORIOUS_MOSS_003ECD90F }}
           repo_token: ${{ secrets.GITHUB_TOKEN }} # Used for Github integrations (i.e. PR comments)
           action: "upload"
-          ###### Repository/Build Configurations - These values can be configured to match your app requirements. ######
-          # For more information regarding Static Web App workflow configurations, please visit: https://aka.ms/swaworkflowconfig
-          app_location: "./communication_ltd_secure/app.py" # App source code path
-          # api_location: "/communication_ltd_vulnerable/app.py" # Api source code path - optional
-          # output_location: "/templates/login" # Built app content directory - optional
-          ###### End of Repository/Build Configurations ######
+          app_location: "./communication_ltd_secure" # App source code path
+          # api_location: "" # Api source code path - optional
+          output_location: "" # Built app content directory - optional
 
   close_pull_request_job:
     if: github.event_name == 'pull_request' && github.event.action == 'closed'
