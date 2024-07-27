@@ -1,9 +1,9 @@
 {% extends "base.html" %}
-{% block title %}Change Password{% endblock %}
-{% block content %}
+{% block title %}Register{% endblock %}
+{% block body %}
 <div class="container mt-3">
     <div class="container-content">
-        <h2>Change Password</h2>
+        <h2>Register</h2>
         <div class="flash-messages">
             {% with messages = get_flashed_messages(with_categories=true) %}
                 {% if messages %}
@@ -15,18 +15,26 @@
                 {% endif %}
             {% endwith %}
         </div>
-        <form method="POST" onsubmit="return validateForm()">
+        <form method="POST" action="{{ url_for('register') }}">
             <div class="form-group">
-                <label for="current_password">Current Password:</label>
-                <input type="password" class="form-control" id="current_password" name="current_password" required>
+                <label for="username">Username:</label>
+                <input type="text" class="form-control" id="username" name="username" required>
             </div>
             <div class="form-group">
-                <label for="new_password">New Password:</label>
-                <input type="password" class="form-control" id="new_password" name="new_password" required oninput="checkPasswordComplexity()">
+                <label for="email">Email:</label>
+                <input type="email" class="form-control" id="email" name="email" required>
+            </div>
+            <div class="form-group">
+                <label for="password">Password:</label>
+                <input type="password" class="form-control" id="password" name="password" required oninput="checkPasswordComplexity()">
                 <div id="passwordAlert" class="alert alert-info mt-2" role="alert" style="display: none;"></div>
             </div>
-            <button type="submit" class="btn btn-primary">Change Password</button>
-            <a class="btn btn-link ajax-link" href="{{ url_for('dashboard') }}">Back</a>
+            <div class="form-group">
+                <label for="confirm_password">Confirm Password:</label>
+                <input type="password" class="form-control" id="confirm_password" name="confirm_password" required>
+            </div>
+            <button type="submit" class="btn btn-primary">Register</button>
+            <a class="btn btn-link ajax-link" href="{{ url_for('login') }}" >Back</a>
         </form>
     </div>
 </div>
@@ -35,12 +43,11 @@
     const DICTIONARY = {{ dictionary | tojson }};
 
     function checkPasswordComplexity() {
-        const password = document.getElementById('new_password').value;
+        const password = document.getElementById('password').value;
         const passwordAlert = document.getElementById('passwordAlert');
         let message = '';
         let alertClass = 'alert-info';
 
-        // תנאי ה-complexity
         if (password.length < PASSWORD_LENGTH) {
             message = `Password must be at least ${PASSWORD_LENGTH} characters long.`;
             alertClass = 'alert-danger';
@@ -67,15 +74,6 @@
         passwordAlert.textContent = message;
         passwordAlert.className = `alert ${alertClass} mt-2`;
         passwordAlert.style.display = 'block';
-    }
-
-    function validateForm() {
-        const passwordAlert = document.getElementById('passwordAlert');
-        if (passwordAlert.classList.contains('alert-danger')) {
-            alert('New password does not meet complexity requirements.');
-            return false;
-        }
-        return true;
     }
 </script>
 {% endblock %}

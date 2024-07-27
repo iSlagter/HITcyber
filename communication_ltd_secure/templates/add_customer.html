@@ -10,14 +10,14 @@
                     <div class="alert alert-success" role="alert">
                         <ul>
                         {% for message in messages %}
-                            <li>{{ message | safe }}</li>
+                            <li>{{ message }}</li>
                         {% endfor %}
                         </ul>
                     </div>
                 {% endif %}
             {% endwith %}
         </div>
-        <form method="POST" action="{{ url_for('add_customer') }}" id="addCustomerForm">
+        <form method="POST">
             <div class="form-group">
                 <label for="first_name">First Name:</label>
                 <input type="text" class="form-control" id="first_name" name="first_name" required>

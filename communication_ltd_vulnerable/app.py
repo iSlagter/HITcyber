@@ -2,9 +2,7 @@ from flask import Flask, request, jsonify, render_template, redirect, url_for, s
 import MySQLdb
 import hashlib
 import os
-import random
-import string
-import re
+from functools import wraps  # ייבוא wraps
 import smtplib
 from email.mime.text import MIMEText
 import logging
@@ -22,41 +20,27 @@ db = MySQLdb.connect(
     db="communication_ltd"
 )
 
-def generate_salt():
-    return ''.join(random.choices(string.ascii_letters + string.digits, k=16))
+# def generate_salt():
+#     return ''.join(random.choices(string.ascii_letters + string.digits, k=16))
 
-def hash_password(password, salt):
-    return hashlib.sha256((password + salt).encode('utf-8')).hexdigest()
+# def hash_password(password, salt):
+#     return hashlib.sha256((password + salt).encode('utf-8')).hexdigest()
 
-def is_password_in_dictionary(password):
-    if DICTIONARY_CHECK:
-        for word in DICTIONARY:
-            if word in password:
-                return True
-    return False
+def login_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'user_id' not in session:
+            flash("You need to be logged in to access this page", 'danger')
+            return redirect(url_for('login'))
+        return f(*args, **kwargs)
+    return decorated_function
 
-def is_password_valid(password):
-    if len(password) < PASSWORD_LENGTH:
-        return False
-    if PASSWORD_COMPLEXITY:
-        if not re.search(r"[A-Z]", password):
-            return False
-        if not re.search(r"[a-z]", password):
-            return False
-        if not re.search(r"[0-9]", password):
-            return False
-        if not re.search(r"[!@#$%^&*(),.?\":{}|<>]", password):
-            return False
-    if is_password_in_dictionary(password):
-        return False
-    return True
-
-def is_password_in_history(user_id, password_hash):
+def is_password_in_history(user_id, password):
     cursor = db.cursor()
-    cursor.execute("SELECT password_hash FROM password_history WHERE user_id = %s ORDER BY change_date DESC LIMIT %s", (user_id, PASSWORD_HISTORY))
+    cursor.execute("SELECT password FROM password_history_vulnerable WHERE user_id = %s ORDER BY change_date DESC LIMIT %s", (user_id, PASSWORD_HISTORY))
     history = cursor.fetchall()
     for old_password_hash in history:
-        if password_hash == old_password_hash[0]:
+        if password == old_password_hash[0]:
             return True
     return False
 
@@ -75,7 +59,7 @@ def send_reset_email(to_email, reset_token, user_id):
         
             # שמירת ה-token במסד הנתונים
             cursor = db.cursor()
-            cursor.execute("INSERT INTO reset_tokens (user_id, token) VALUES (%s, %s)", (user_id, reset_token))
+            cursor.execute("INSERT INTO reset_tokens_vulnerable (user_id, token) VALUES (%s, %s)", (user_id, reset_token))
             db.commit()
             cursor.close()
     except Exception as e:
@@ -92,25 +76,37 @@ def default():
 @app.route('/register', methods=['GET', 'POST'])
 def register():
     if request.method == 'POST':
-        username = request.form['username']
-        email = request.form['email']
-        password = request.form['password']
-        
-        if not is_password_valid(password):
-            flash("Password does not meet complexity requirements or is too common.")
-        
-        salt = generate_salt()
-        password_hash = hash_password(password, salt)
-        
+        username = request.form.get('username')
+        email = request.form.get('email')
+        password = request.form.get('password')
+
+        # הדפסת הנתונים שנשלחים
+        print(f"Received data: username='{username}', email='{email}', password='{password}'")
+
+        # בניית השאילתה
+        query_user = f"INSERT INTO users_vulnerable (username, email, password) VALUES ('{username}', '{email}', '{password}')"
+        print(f"Constructed query: {query_user}")
+
         cursor = db.cursor()
-        cursor.execute("INSERT INTO users (username, email, password_hash, salt) VALUES (%s, %s, %s, %s)", (username, email, password_hash, salt))
-        user_id = cursor.lastrowid
-        cursor.execute("INSERT INTO password_history (user_id, password_hash) VALUES (%s, %s)", (user_id, password_hash))
-        db.commit()
-        cursor.close()
-        
-        return redirect(url_for('login'))
-    return render_template('register.html')
+        try:
+            cursor.execute(query_user)
+
+            # בדיקה אם יש תוצאה לשאילתה הזדונית
+            while cursor.nextset():
+                result = cursor.fetchall()
+                flash(f"SQL Injection result: {result}", category='danger')
+
+            db.commit()
+            flash(f"User {username} added successfully! Email: {email}", category='success')
+        except MySQLdb.Error as e:
+            db.rollback()
+            flash(f"An error occurred: {e}", 'danger')
+            print(f"An error occurred: {e}")  # הדפסת השגיאה לקונסול
+        finally:
+            cursor.close()
+
+        return redirect(url_for('register'))
+    return render_template('register.html', password_length=PASSWORD_LENGTH, dictionary=DICTIONARY)
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -119,16 +115,26 @@ def login():
         password = request.form['password']
         
         cursor = db.cursor()
-        cursor.execute("SELECT id, password_hash, salt FROM users WHERE username = %s", (username,))
+        cursor.execute(f"SELECT * FROM users_vulnerable WHERE username = '{username}'")
+        logging.debug(f"SELECT * FROM users_vulnerable WHERE username = '{username}'")
         user = cursor.fetchone()
+        db.commit()
+        cursor.close()
         
-        if not user:
-            flash("Username does not exist")
+        logging.debug(f"User fetched from database: {user}")
+
+        if user is None:
+            flash("Username does not exist", 'danger')
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return jsonify({'redirect': url_for('login')})
             return redirect(url_for('login'))
         
-        if hash_password(password, user[2]) == user[1]:
+        if password == user[3]:
             session['user_id'] = user[0]
+            session['username'] = username
             session.pop('login_attempts', None)  # Reset login attempts
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return jsonify({'redirect': url_for('dashboard')})
             return redirect(url_for('dashboard'))
         else:
             if 'login_attempts' not in session:
@@ -136,74 +142,123 @@ def login():
             session['login_attempts'] += 1
             remaining_attempts = 3 - session['login_attempts']
             if remaining_attempts > 0:
-                flash(f"Invalid password. You have {remaining_attempts} attempts left.")
+                flash(f"Invalid password. You have {remaining_attempts} attempts left.", 'danger')
             else:
-                flash("You have exceeded the maximum number of login attempts. Please try again later.")
+                flash("You have exceeded the maximum number of login attempts. Please try again later.", 'danger')
                 session.pop('login_attempts', None)  # Reset after exceeding
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return jsonify({'redirect': url_for('login')})
             return redirect(url_for('login'))
     return render_template('login.html')
-
 @app.route('/dashboard')
 def dashboard():
-    if 'user_id' not in session:
+    user_id = session.get('user_id')
+    cursor = db.cursor()
+    
+    cursor.execute(f"SELECT username FROM users_vulnerable WHERE id = '{user_id}'")
+    result = cursor.fetchone()
+    
+    if result:
+        username = result[0]
+        print(username)
+    else:
+        flash("User not found", 'danger')
         return redirect(url_for('login'))
     
-    cursor = db.cursor()
-    cursor.execute("SELECT username FROM users WHERE id = %s", (session['user_id'],))
-    username = cursor.fetchone()[0]
-    cursor.execute("SELECT first_name, last_name, address FROM customers")
+    cursor.execute("SELECT first_name, last_name, address FROM customers_vulnerable")
     customers = cursor.fetchall()
+    db.commit()
     cursor.close()
-    
-    return render_template('dashboard.html', customers=customers, username=username)
+
+    return render_template('dashboard.html', customers=customers, username=session['username'] )
+
+
 
 @app.route('/add_customer', methods=['GET', 'POST'])
+@login_required
 def add_customer():
     if request.method == 'POST':
-        first_name = request.form['first_name']
-        last_name = request.form['last_name']
-        address = request.form['address']
-        
+        first_name = request.form.get('first_name')
+        last_name = request.form.get('last_name')
+        address = request.form.get('address')
+
+        # הדפסת הנתונים שנשלחים
+        print(f"Received data: first_name='{first_name}', last_name='{last_name}', address='{address}'")
+
+        # בניית השאילתה
+        query = f"INSERT INTO customers_vulnerable (first_name, last_name, address) VALUES ('{first_name}', '{last_name}', '{address}')"
+        print(f"Constructed query: {query}")  
+
         cursor = db.cursor()
-        cursor.execute("INSERT INTO customers (first_name, last_name, address) VALUES (%s, %s, %s)", (first_name, last_name, address))
-        db.commit()
-        cursor.close()
-        
-        return redirect(url_for('dashboard'))
+        try:
+            cursor.execute(query)
+            # בדיקה אם יש תוצאה לשאילתה הזדונית
+            while cursor.nextset():
+                result = cursor.fetchall()
+                # flash(Markup(f"SQL Injection result: {result}"), 'danger')
+
+            db.commit()
+            flash(f"Customer added successfully! First Name: {first_name}, Last Name: {last_name}, Address: {address}", 'success')
+        except MySQLdb.Error as e:
+            db.rollback()
+            flash(f"An error occurred: {e}", 'danger')
+            print(f"An error occurred: {e}")  # הדפסת השגיאה לקונסול
+        finally:
+            cursor.close()
+
+        return redirect(url_for('add_customer'))
     return render_template('add_customer.html')
 
+    # if request.method == 'POST':
+    #     first_name = request.form['first_name']
+    #     last_name = request.form['last_name']
+    #     address = request.form['address']
+        
+    #     cursor = db.cursor()
+    #     cursor.execute(f"INSERT INTO customers_vulnerable (first_name, last_name, address) VALUES ('{first_name}', '{last_name}', '{address}')")
+    #     logging.debug(f"INSERT INTO customers_vulnerable (first_name, last_name, address) VALUES ('{first_name}', '{last_name}', '{address}')")
+    #     db.commit()
+    #     cursor.close()
+        
+    #     return redirect(url_for('dashboard'))
+    # return render_template('add_customer.html')
+
+
 @app.route('/change_password', methods=['GET', 'POST'])
+@login_required
 def change_password():
+    user_id = session.get('user_id')
+
     if request.method == 'POST':
-        user_id = session.get('user_id')
         current_password = request.form['current_password']
         new_password = request.form['new_password']
-
-        # בדיקה אם הסיסמא הנוכחית נכונה
+        
         cursor = db.cursor()
-        cursor.execute("SELECT password_hash, salt FROM users WHERE id = %s", (user_id,))
+        cursor.execute(f"SELECT password FROM users_vulnerable WHERE password = '{current_password}' AND id = '{user_id}'")
         user = cursor.fetchone()
-        if not user or hash_password(current_password, user[1]) != user[0]:
-            return "Current password is incorrect"
+        if not user or (current_password != user[0]):
+            flash("Current password is incorrect", 'danger')
+            return redirect(url_for('change_password'))
         
-        # בדיקת תקינות הסיסמא החדשה לפי הקונפיגורציה
         if not is_password_valid(new_password):
-            return "Password does not meet complexity requirements"
+            flash("Password does not meet complexity requirements", 'danger')
+            return redirect(url_for('change_password'))
         
-        new_password_hash = hash_password(new_password, user[1])
+        if is_password_in_history(user_id, new_password):
+            flash("New password was used recently. Please choose a different password.", 'danger')
+            return redirect(url_for('change_password'))
 
-        # בדיקת היסטוריית הסיסמאות
-        if is_password_in_history(user_id, new_password_hash):
-            return "New password was used recently. Please choose a different password."
-
-        # שמירת הסיסמא החדשה והוספתה להיסטוריית הסיסמאות
-        cursor.execute("UPDATE users SET password_hash = %s WHERE id = %s", (new_password_hash, user_id))
-        cursor.execute("INSERT INTO password_history (user_id, password_hash) VALUES (%s, %s)", (user_id, new_password_hash))
+        cursor.execute("UPDATE users_vulnerable SET password = %s WHERE id = %s", (new_password, user_id))
+        cursor.execute("INSERT INTO password_history_vulnerable (user_id, password) VALUES (%s, %s)", (user_id, new_password))
         db.commit()
         cursor.close()
 
         flash("Password changed successfully")
-    return render_template('change_password.html')
+        return redirect(url_for('dashboard'))
+    return render_template('change_password.html', 
+                           password_length=PASSWORD_LENGTH, 
+                           dictionary=DICTIONARY)
+
 
 @app.route('/forgot_password', methods=['GET', 'POST'])
 def forgot_password():
@@ -211,17 +266,25 @@ def forgot_password():
         email = request.form['email']
         
         cursor = db.cursor()
-        cursor.execute("SELECT id FROM users WHERE email = %s", (email,))
+        cursor.execute("SELECT id FROM users_vulnerable WHERE email = %s", (email,))
         user = cursor.fetchone()
-        
+        db.commit()
+        cursor.close()
+
         if user:
             user_id = user[0]
             reset_token = hashlib.sha1(os.urandom(24)).hexdigest()
             send_reset_email(email, reset_token, user_id)
             return redirect(url_for('verify_token', email=email))
         else:
-            flash("Email not found")
+            flash("Email not found", 'danger')
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return render_template('forgot_password.html')
+            else:
+                return redirect(url_for('forgot_password'))
     return render_template('forgot_password.html')
+
+
 
 @app.route('/verify_token', methods=['GET', 'POST'])
 def verify_token():
@@ -232,18 +295,27 @@ def verify_token():
         cursor = db.cursor()
         cursor.execute("""
             SELECT rt.user_id
-            FROM reset_tokens rt
-            JOIN users u ON rt.user_id = u.id
+            FROM reset_tokens_vulnerable rt
+            JOIN users_vulnerable u ON rt.user_id = u.id
             WHERE rt.token = %s AND u.email = %s
         """, (token, email))
         result = cursor.fetchone()
+        db.commit()
+        cursor.close()
         
         if result:
             user_id = result[0]
             session['reset_user_id'] = user_id
-            return redirect(url_for('reset_password'))
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return jsonify({'redirect': url_for('reset_password')})
+            else:
+                return redirect(url_for('reset_password'))
         else:
-            flash("Invalid token or email")
+            flash("Invalid token or email", 'danger')
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return jsonify({'error': 'Invalid token or email'})
+            else:
+                return redirect(url_for('verify_token', email=email))
     return render_template('verify_token.html', email=request.args.get('email'))
 
 
@@ -254,28 +326,43 @@ def reset_password():
         new_password = request.form['new_password']
         
         cursor = db.cursor()
-        cursor.execute("SELECT salt FROM users WHERE id = %s", (user_id,))
+        cursor.execute("SELECT password FROM users_vulnerable WHERE id = %s", (user_id,))
         result = cursor.fetchone()
         
         if result:
-            salt = result[0]
-            new_password_hash = hash_password(new_password, salt)
-            
-            if is_password_valid(new_password) and not is_password_in_history(user_id, new_password_hash):
+            if is_password_valid(new_password) and not is_password_in_history(user_id, new_password):
                 logging.debug("the password is good")
-                cursor.execute("UPDATE users SET password_hash = %s WHERE id = %s", (new_password_hash, user_id))
-                cursor.execute("INSERT INTO password_history (user_id, password_hash) VALUES (%s, %s)", (user_id, new_password_hash))
+                cursor.execute("UPDATE users_vulnerable SET password = %s WHERE id = %s", (new_password, user_id))
+                cursor.execute("INSERT INTO password_history_vulnerable (user_id, password) VALUES (%s, %s)", (user_id, new_password))
                 db.commit()
+                cursor.close()
                 session.pop('reset_user_id', None)
-                flash("Password has been reset successfully, Redirecting you to the home page...")
-                return redirect(url_for('dashboard'))
+                flash("Password has been reset successfully, Redirecting you to the login page...", 'success')
+                if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                    return jsonify({'redirect': url_for('login')})
+                else:
+                    return redirect(url_for('login'))
 
             else:
-                flash("New password does not meet requirements or was used recently.")
+                flash("New password does not meet requirements or was used recently.", 'danger')
+                if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                    return render_template('reset_password.html')
+                else:
+                    return redirect(url_for('reset_password'))
         else:
-            flash("User not found")
+            flash("User not found", 'danger')
+            db.commit()
+            cursor.close()
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return render_template('reset_password.html')
+            else:
+                return redirect(url_for('reset_password'))
     return render_template('reset_password.html')
 
+@app.route('/favicon.ico')
+def favicon():
+    return send_from_directory(os.path.join(app.root_path, 'static'),
+                               'favicon.ico', mimetype='image/vnd.microsoft.icon')
 @app.route('/logout')
 def logout():
     session.pop('user_id', None)

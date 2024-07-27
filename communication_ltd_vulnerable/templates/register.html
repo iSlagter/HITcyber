@@ -1,25 +1,21 @@
-<!doctype html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Register</title>
-    <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet">
-</head>
-<body>
-    <div class="container mt-5">
+{% extends "base.html" %}
+{% block title %}Register{% endblock %}
+{% block body %}
+<div class="container mt-3">
+    <div class="container-content">
         <h2>Register</h2>
-        {% with messages = get_flashed_messages() %}
-            {% if messages %}
-                <div class="alert alert-danger" role="alert">
-                    <ul>
-                    {% for message in messages %}
-                        <li>{{ message }}</li>
+        <div class="flash-messages">
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category }}" role="alert">
+                            {{ message | safe}}
+                        </div>
                     {% endfor %}
-                    </ul>
-                </div>
-            {% endif %}
-        {% endwith %}
-        <form method="POST">
+                {% endif %}
+            {% endwith %}
+        </div>
+        <form method="POST" action="{{ url_for('register') }}">
             <div class="form-group">
                 <label for="username">Username:</label>
                 <input type="text" class="form-control" id="username" name="username" required>
@@ -30,14 +26,54 @@
             </div>
             <div class="form-group">
                 <label for="password">Password:</label>
-                <input type="password" class="form-control" id="password" name="password" required>
+                <input type="password" class="form-control" id="password" name="password" required oninput="checkPasswordComplexity()">
+                <div id="passwordAlert" class="alert alert-info mt-2" role="alert" style="display: none;"></div>
+            </div>
+            <div class="form-group">
+                <label for="confirm_password">Confirm Password:</label>
+                <input type="password" class="form-control" id="confirm_password" name="confirm_password" required>
             </div>
             <button type="submit" class="btn btn-primary">Register</button>
-            <a href="{{ url_for('login') }}" class="btn btn-link">Back</a>
+            <a class="btn btn-link ajax-link" href="{{ url_for('login') }}" >Back</a>
         </form>
     </div>
-    <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.9.2/dist/umd/popper.min.js"></script>
-    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
-</body>
-</html>
+</div>
+<script>
+    const PASSWORD_LENGTH = {{ password_length }};
+    const DICTIONARY = {{ dictionary | tojson  }};
+
+    function checkPasswordComplexity() {
+        const password = document.getElementById('password').value;
+        const passwordAlert = document.getElementById('passwordAlert');
+        let message = '';
+        let alertClass = 'alert-info';
+
+        if (password.length < PASSWORD_LENGTH) {
+            message = `Password must be at least ${PASSWORD_LENGTH} characters long.`;
+            alertClass = 'alert-danger';
+        } else if (!/[A-Z]/.test(password)) {
+            message = 'Password must contain at least one uppercase letter.';
+            alertClass = 'alert-danger';
+        } else if (!/[a-z]/.test(password)) {
+            message = 'Password must contain at least one lowercase letter.';
+            alertClass = 'alert-danger';
+        } else if (!/[0-9]/.test(password)) {
+            message = 'Password must contain at least one number.';
+            alertClass = 'alert-danger';
+        } else if (!/[!@#$%^&*]/.test(password)) {
+            message = 'Password must contain at least one special character.';
+            alertClass = 'alert-danger';
+        } else if (DICTIONARY.includes(password)) {
+            message = 'Password must not be a common password.';
+            alertClass = 'alert-danger';
+        } else {
+            message = 'Password meets complexity requirements.';
+            alertClass = 'alert-success';
+        }
+
+        passwordAlert.textContent = message;
+        passwordAlert.className = `alert ${alertClass} mt-2`;
+        passwordAlert.style.display = 'block';
+    }
+</script>
+{% endblock %}
