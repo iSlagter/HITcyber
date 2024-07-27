@@ -17,8 +17,7 @@ load_dotenv()
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
-logging.debug(f" passwd------------ : {os.getenv('MySQLpasswd')}")
-print(f" the mysql password is:  {os.getenv('MySQLpasswd')}")
+
 cnx = mysql.connector.connect(
     host="hit-slagter-mysql.mysql.database.azure.com",
     user=os.getenv('MySQLuser'),
@@ -43,17 +42,17 @@ def login_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
-def is_password_in_history(user_id, password):
+def is_password_in_history(user_id, new_password_hash):
     cursor = cnx.cursor()
     cursor.execute("""
-        SELECT password FROM password_history 
+        SELECT password_hash FROM password_history 
         WHERE user_id = %s 
         ORDER BY change_date DESC 
         LIMIT %s
     """, (user_id, PASSWORD_HISTORY))
     history = cursor.fetchall()
     for old_password_hash in history:
-        if password == old_password_hash[0]:
+        if new_password_hash == old_password_hash[0]:
             return True
     return False
 
@@ -261,7 +260,7 @@ def change_password():
 @app.route('/forgot_password', methods=['GET', 'POST'])
 def forgot_password():
     if request.method == 'POST':
-        email = request.form['email']
+        email = request.form.get('email')
         
         cursor = cnx.cursor()
         cursor.execute("""
@@ -343,10 +342,15 @@ def reset_password():
             flash("User not found", 'danger')
     return render_template('reset_password.html')
 
+@app.route('/favicon.ico')
+def favicon():
+    return send_from_directory(os.path.join(app.root_path, 'static'),
+                               'favicon.ico', mimetype='image/vnd.microsoft.icon')
+
 @app.route('/logout')
 def logout():
     session.pop('user_id', None)
     return redirect(url_for('login'))
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(host="0.0.0.0", port=80, debug=True)
