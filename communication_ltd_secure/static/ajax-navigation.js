@@ -39,6 +39,7 @@ $(document).ready(function() {
     $(document).on('submit', 'form', function(e) {
         e.preventDefault();
         var $form = $(this);
+
         $.ajax({
             type: $form.attr('method'),
             url: $form.attr('action'),
