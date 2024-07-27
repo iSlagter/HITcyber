@@ -18,10 +18,6 @@ body {
 }
 
 
-/* .content {
-    margin-top: 56px; /* מרווח מתחת ל-navbar */
-} */
-
 .container {
     background: rgba(255, 255, 255, 1); /* צבע רקע לבן עם שקיפות של 80% */
     border-radius: 10px;

@@ -45,8 +45,7 @@ $(document).ready(function() {
             data: $form.serialize(),
             success: function(response) {
                 if (response.redirect) {
-                    loadContent(response.redirect);
-                    location.reload(false);
+                    window.location.href = response.redirect;
                 } else {
                     var $mainContent = $('#logged-main-content').length ? $('#logged-main-content') : $('#main-content');
                     var newContent = $(response).find('#logged-main-content').html() || $(response).find('#main-content').html();
