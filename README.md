@@ -167,6 +167,10 @@ Secure Email Handling: Password reset tokens are securely generated and emailed 
 
 - This file contains SQL commands to create stored procedures used in the application.
 
+## Demo
+- https://hit-app-secure.azurewebsites.net/  - secured version
+- https://hit-app-vulnerable.azurewebsites.net/ - vulnerable version
+
 ## Contact
 
 For any questions or issues, please contact me at [dslagter99@gmail.com].
