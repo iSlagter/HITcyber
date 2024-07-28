@@ -132,7 +132,11 @@ def login():
         cursor.execute("""SELECT id, password_hash, salt FROM users WHERE username = %s""", (username,))
         user = cursor.fetchone()
         cursor.close()
-        
+       
+        if not user:
+             flash(f"User: {username} not exist.", category='danger')
+             return redirect(url_for('login'))
+
         if user and hash_password(password, user[2]) == user[1]:
             session['user_id'] = user[0]
             session.pop('login_attempts', None)  # Reset login attempts
@@ -253,8 +257,8 @@ def change_password():
         cnx.commit()
         cursor.close()
 
-        flash("Password changed successfully")
-        return redirect(url_for('dashboard'))
+        flash("Password changed successfully",category='success')
+        return redirect(url_for('change_password'))
     return render_template('change_password.html', password_length=PASSWORD_LENGTH, dictionary=DICTIONARY)
 
 @app.route('/forgot_password', methods=['GET', 'POST'])
