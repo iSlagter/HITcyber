@@ -64,7 +64,8 @@ cd <repository-directory>
 ```bash
 python3 -m venv venv
 
-source venv/bin/activate  # On Windows use `venv\Scripts\activate`
+source venv/bin/activate
+# On Windows use `venv\Scripts\activate`
 
 pip install -r requirements.txt
 
@@ -94,6 +95,7 @@ docker exec -i mysql-communication mysql -uroot -proot communication_ltd < sql/S
 ```
 
 4. **Run the Flask application:**
+- note: you need to update the mysql cred at the .env file
 
 ```python
 
