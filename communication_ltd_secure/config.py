@@ -10,7 +10,7 @@ PASSWORD_COMPLEXITY = True
 PASSWORD_HISTORY = 3
 DICTIONARY_CHECK = True
 LOGIN_ATTEMPTS = 3
-DICTIONARY = ["password", "123456", "qwerty", "letmein", "monkey", "football"]
+DICTIONARY = ["Password123!", "123456789","Aa1234567890!", "qwerty", "letmein", "monkey", "football"]
 
 import re
 
@@ -25,6 +25,6 @@ def is_password_valid(password):
         return False
     if not re.search(r"[!@#$%^&*]", password):
         return False
-    if DICTIONARY_CHECK and password in DICTIONARY:
+    if password in DICTIONARY:
         return False
     return True

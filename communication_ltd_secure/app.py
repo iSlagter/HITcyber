@@ -86,15 +86,19 @@ def register():
         username = request.form.get('username')
         email = request.form.get('email')
         password = request.form.get('password')
-
+        
         salt = generate_salt()
         password_hash = hash_password(password, salt)
 
         cursor = cnx.cursor()
         try:
-            cursor.callproc('add_user', (username, email, password_hash, salt))
-            cnx.commit()
-            flash(f"User {username} added successfully! Email: {email}", category='success')
+            if is_password_valid(password):
+                cursor.callproc('add_user', (username, email, password_hash, salt))
+                cnx.commit()
+                flash(f"User {username} added successfully! Email: {email}", category='success')
+            else:
+                flash("Password does not meet complexity requirements", 'danger')
+                return redirect(url_for('register'))
         except mysql.connector.Error as e:
             cnx.rollback()
             flash(f"An error occurred: {e}", 'danger')
