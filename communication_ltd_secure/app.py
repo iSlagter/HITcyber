@@ -44,16 +44,12 @@ def login_required(f):
 
 def is_password_in_history(user_id, new_password_hash):
     cursor = cnx.cursor()
-    cursor.execute("""
-        SELECT password_hash FROM password_history 
-        WHERE user_id = %s 
-        ORDER BY change_date DESC 
-        LIMIT %s
-    """, (user_id, PASSWORD_HISTORY))
-    history = cursor.fetchall()
-    for old_password_hash in history:
-        if new_password_hash == old_password_hash[0]:
-            return True
+    cursor.callproc('get_password_history', (user_id, PASSWORD_HISTORY))
+    for result in cursor.stored_results():
+        history = result.fetchall()
+        for old_password_hash in history:
+            if new_password_hash == old_password_hash[0]:
+                return True
     return False
 
 def send_reset_email(to_email, reset_token, user_id):
@@ -70,10 +66,7 @@ def send_reset_email(to_email, reset_token, user_id):
             logging.debug("The email was sent successfully.")
         
             cursor = cnx.cursor()
-            cursor.execute("""
-                INSERT INTO reset_tokens (user_id, token) 
-                VALUES (%s, %s)
-            """, (user_id, reset_token))
+            cursor.callproc('add_reset_token', (user_id, reset_token))
             cnx.commit()
             cursor.close()
     except Exception as e:
@@ -99,17 +92,7 @@ def register():
 
         cursor = cnx.cursor()
         try:
-            query_user = """
-                INSERT INTO users (username, email, password_hash, salt) 
-                VALUES (%s, %s, %s, %s)
-            """
-            cursor.execute(query_user, (username, email, password_hash, salt))
-            user_id = cursor.lastrowid
-            query_history = """
-                INSERT INTO password_history (user_id, password_hash) 
-                VALUES (%s, %s)
-            """
-            cursor.execute(query_history, (user_id, password_hash))
+            cursor.callproc('add_user', (username, email, password_hash, salt))
             cnx.commit()
             flash(f"User {username} added successfully! Email: {email}", category='success')
         except mysql.connector.Error as e:
@@ -129,15 +112,15 @@ def login():
         password = request.form['password']
         
         cursor = cnx.cursor()
-        cursor.execute("""SELECT id, password_hash, salt FROM users WHERE username = %s""", (username,))
-        user = cursor.fetchone()
+        cursor.callproc('get_user_by_username', (username,))
+        user = next(cursor.stored_results()).fetchone()
         cursor.close()
-       
-        if not user:
-             flash(f"User: {username} not exist.", category='danger')
-             return redirect(url_for('login'))
 
-        if user and hash_password(password, user[2]) == user[1]:
+        if not user:
+            flash(f"User: {username} does not exist.", category='danger')
+            return redirect(url_for('login'))
+
+        if hash_password(password, user[2]) == user[1]:
             session['user_id'] = user[0]
             session.pop('login_attempts', None)  # Reset login attempts
             if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
@@ -165,24 +148,18 @@ def dashboard():
     user_id = session.get('user_id')
     cursor = cnx.cursor()
     
-    cursor.execute("""
-        SELECT username 
-        FROM users 
-        WHERE id = %s
-    """, (user_id,))
-    result = cursor.fetchone()
+    cursor.callproc('get_username_by_id', (user_id,))
+    result = next(cursor.stored_results()).fetchone()
     
     if result:
+        logging.debug(result)
         username = result[0]
     else:
         flash("User not found", 'danger')
         return redirect(url_for('login'))
     
-    cursor.execute("""
-        SELECT first_name, last_name, address 
-        FROM customers
-    """)
-    customers = cursor.fetchall()
+    cursor.callproc('get_all_customers')
+    customers = next(cursor.stored_results()).fetchall()
     cursor.close()
 
     return render_template('dashboard.html', customers=customers, username=username)
@@ -197,11 +174,7 @@ def add_customer():
 
         cursor = cnx.cursor()
         try:
-            query = """
-                INSERT INTO customers (first_name, last_name, address) 
-                VALUES (%s, %s, %s)
-            """
-            cursor.execute(query, (first_name, last_name, address))
+            cursor.callproc('add_customer', (first_name, last_name, address))
             cnx.commit()
             flash(f"Customer added successfully! First Name: {first_name}, Last Name: {last_name}, Address: {address}", 'success')
         except mysql.connector.Error as e:
@@ -224,14 +197,10 @@ def change_password():
         new_password = request.form['new_password']
         
         cursor = cnx.cursor()
-        cursor.execute("""
-            SELECT password_hash, salt 
-            FROM users 
-            WHERE id = %s
-        """, (user_id,))
-        user = cursor.fetchone()
+        cursor.callproc('get_user_by_id', (user_id,))
+        user = next(cursor.stored_results()).fetchone()
         
-        if not user or hash_password(current_password, user[1]) != user[0]:
+        if not user or hash_password(current_password, user[2]) != user[1]:
             flash("Current password is incorrect", 'danger')
             return redirect(url_for('change_password'))
         
@@ -239,25 +208,18 @@ def change_password():
             flash("Password does not meet complexity requirements", 'danger')
             return redirect(url_for('change_password'))
         
-        new_password_hash = hash_password(new_password, user[1])
+        new_password_hash = hash_password(new_password, user[2])
 
         if is_password_in_history(user_id, new_password_hash):
             flash("New password was used recently. Please choose a different password.", 'danger')
             return redirect(url_for('change_password'))
 
-        cursor.execute("""
-            UPDATE users 
-            SET password_hash = %s 
-            WHERE id = %s
-        """, (new_password_hash, user_id))
-        cursor.execute("""
-            INSERT INTO password_history (user_id, password_hash) 
-            VALUES (%s, %s)
-        """, (user_id, new_password_hash))
+        cursor.callproc('update_password', (user_id, new_password_hash))
+        cursor.callproc('add_password_history', (user_id, new_password_hash))
         cnx.commit()
         cursor.close()
 
-        flash("Password changed successfully",category='success')
+        flash("Password changed successfully", category='success')
         return redirect(url_for('change_password'))
     return render_template('change_password.html', password_length=PASSWORD_LENGTH, dictionary=DICTIONARY)
 
@@ -267,12 +229,8 @@ def forgot_password():
         email = request.form.get('email')
         
         cursor = cnx.cursor()
-        cursor.execute("""
-            SELECT id 
-            FROM users 
-            WHERE email = %s
-        """, (email,))
-        user = cursor.fetchone()
+        cursor.callproc('get_user_by_email', (email,))
+        user = next(cursor.stored_results()).fetchone()
         cursor.close()
 
         if user:
@@ -291,13 +249,8 @@ def verify_token():
         token = request.form['token']
         
         cursor = cnx.cursor()
-        cursor.execute("""
-            SELECT rt.user_id
-            FROM reset_tokens rt
-            JOIN users u ON rt.user_id = u.id
-            WHERE rt.token = %s AND u.email = %s
-        """, (token, email))
-        result = cursor.fetchone()
+        cursor.callproc('get_user_by_reset_token', (token, email))
+        result = next(cursor.stored_results()).fetchone()
         cursor.close()
         
         if result:
@@ -315,27 +268,16 @@ def reset_password():
         new_password = request.form['new_password']
         
         cursor = cnx.cursor()
-        cursor.execute("""
-            SELECT salt 
-            FROM users 
-            WHERE id = %s
-        """, (user_id,))
-        result = cursor.fetchone()
+        cursor.callproc('get_user_by_id', (user_id,))
+        result = next(cursor.stored_results()).fetchone()
         
         if result:
-            salt = result[0]
+            salt = result[2]
             new_password_hash = hash_password(new_password, salt)
             
             if is_password_valid(new_password) and not is_password_in_history(user_id, new_password_hash):
-                cursor.execute("""
-                    UPDATE users 
-                    SET password_hash = %s 
-                    WHERE id = %s
-                """, (new_password_hash, user_id))
-                cursor.execute("""
-                    INSERT INTO password_history (user_id, password_hash) 
-                    VALUES (%s, %s)
-                """, (user_id, new_password_hash))
+                cursor.callproc('update_password', (user_id, new_password_hash))
+                cursor.callproc('add_password_history', (user_id, new_password_hash))
                 cnx.commit()
                 session.pop('reset_user_id', None)
                 flash("Password has been reset successfully, Redirecting you to the login page...", 'success')
