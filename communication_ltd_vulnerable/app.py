@@ -113,13 +113,17 @@ def login():
     if request.method == 'POST':
         username = request.form['username']
         password = request.form['password']
-        
+        query_if_exist = f"SELECT username FROM users_vulnerable WHERE (username = '{username}') LIMIT 1"
         cursor = cnx.cursor()
         query = f"SELECT * FROM users_vulnerable WHERE (username = '{username}' ) AND (password = '{password}' ) LIMIT 1"
         logging.debug(f"Executing query: {query}")
         
         cursor.execute(query)
         user = cursor.fetchone()
+        cursor.execute(query_if_exist)
+        user_exist = cursor.fetchone()
+
+
         
         # קריאת כל התוצאות שנותרו מהשאילתה הקודמת לפני ביצוע פעולות נוספות
         while cursor.nextset():
@@ -129,29 +133,31 @@ def login():
                 break
         
         cursor.close()
-        
-        if user:
-            session['user_id'] = user[0]
-            session['username'] = user[1]
-            session.pop('login_attempts', None)  # Reset login attempts
-            
-            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-                return jsonify({'redirect': url_for('dashboard')})
-            return redirect(url_for('dashboard'))
+        if not user_exist:
+            flash(f"User: {username} not exist.", category='danger')
         else:
-            if 'login_attempts' not in session:
-                session['login_attempts'] = 0
-            session['login_attempts'] += 1
-            remaining_attempts = 3 - session['login_attempts']
-            if remaining_attempts > 0:
-                flash(f"Invalid password. You have {remaining_attempts} attempts left.", category='danger')
+            if user:
+                session['user_id'] = user[0]
+                session['username'] = user[1]
+                session.pop('login_attempts', None)  # Reset login attempts
+                
+                if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                    return jsonify({'redirect': url_for('dashboard')})
+                return redirect(url_for('dashboard'))
             else:
-                flash("You have exceeded the maximum number of login attempts. Please try again later.", 'danger')
-                session.pop('login_attempts', None)  # Reset after exceeding
-            
-            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-                return jsonify({'redirect': url_for('login')})
-            return redirect(url_for('login'))
+                if 'login_attempts' not in session:
+                    session['login_attempts'] = 0
+                session['login_attempts'] += 1
+                remaining_attempts = 3 - session['login_attempts']
+                if remaining_attempts > 0:
+                    flash(f"Invalid password. You have {remaining_attempts} attempts left.", category='danger')
+                else:
+                    flash("You have exceeded the maximum number of login attempts. Please try again later.", 'danger')
+                    session.pop('login_attempts', None)  # Reset after exceeding
+                
+                if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                    return jsonify({'redirect': url_for('login')})
+                return redirect(url_for('login'))
     return render_template('login.html')
 
 
