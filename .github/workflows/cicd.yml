@@ -31,19 +31,19 @@ jobs:
       - name: Build and push container image (Secure)
         run: |
           docker build -t hitacr.azurecr.io/hit-cyber-image-secure:latest ./communication_ltd_secure
-          echo "${{ secrets.HITACR_PASSWORD }}" | docker login hitacr.azurecr.io -u "${{ secrets.HITACR_USERNAME }}" --password-stdin
+          echo "${{ secrets.HITCAPP_REGISTRY_PASSWORD }}" | docker login hitacr.azurecr.io -u "${{ secrets.HITCAPP_REGISTRY_USERNAME }}" --password-stdin
           docker push hitacr.azurecr.io/hit-cyber-image-secure:latest
 
       - name: Build and push container image (Vulnerable)
         run: |
           docker build -t hitacr.azurecr.io/hit-cyber-image-vulnerable:latest ./communication_ltd_vulnerable
-          echo "${{ secrets.HITACR_PASSWORD }}" | docker login hitacr.azurecr.io -u "${{ secrets.HITACR_USERNAME }}" --password-stdin
+          echo "${{ secrets.HITCAPP_REGISTRY_PASSWORD }}" | docker login hitacr.azurecr.io -u "${{ secrets.HITCAPP_REGISTRY_USERNAME }}" --password-stdin
           docker push hitacr.azurecr.io/hit-cyber-image-vulnerable:latest
 
       - name: Deploy Web App from ACR (Secure)
         run: |
-          az webapp config container set --name hit-app-secure --resource-group HIT --docker-custom-image-name hitacr.azurecr.io/hit-cyber-image-secure:latest --docker-registry-server-url https://hitacr.azurecr.io --docker-registry-server-user ${{ secrets.HITACR_USERNAME }} --docker-registry-server-password ${{ secrets.HITACR_PASSWORD }}
+          az webapp config container set --name hit-app-secure --resource-group HIT --docker-custom-image-name hitacr.azurecr.io/hit-cyber-image-secure:latest --docker-registry-server-url https://hitacr.azurecr.io --docker-registry-server-user ${{ secrets.HITCAPP_REGISTRY_USERNAME }} --docker-registry-server-password ${{ secrets.HITCAPP_REGISTRY_PASSWORD }}
 
       - name: Deploy Web App from ACR (Vulnerable)
         run: |
-          az webapp config container set --name hit-app-vulnerable --resource-group HIT --docker-custom-image-name hitacr.azurecr.io/hit-cyber-image-vulnerable:latest --docker-registry-server-url https://hitacr.azurecr.io --docker-registry-server-user ${{ secrets.HITACR_USERNAME }} --docker-registry-server-password ${{ secrets.HITACR_PASSWORD }}
+          az webapp config container set --name hit-app-vulnerable --resource-group HIT --docker-custom-image-name hitacr.azurecr.io/hit-cyber-image-vulnerable:latest --docker-registry-server-url https://hitacr.azurecr.io --docker-registry-server-user ${{ secrets.HITCAPP_REGISTRY_USERNAME }} --docker-registry-server-password ${{ secrets.HITCAPP_REGISTRY_PASSWORD }}
