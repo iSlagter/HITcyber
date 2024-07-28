@@ -28,6 +28,16 @@ jobs:
           tenant-id: ${{ secrets.HITCAPP_AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.HITCAPP_AZURE_SUBSCRIPTION_ID }}
 
+      - name: Create .env file (Secure)
+        run: |
+          echo "MySQLuser=${{ secrets.MySQLuser }}" >> ./communication_ltd_secure/.env
+          echo "MySQLpasswd=${{ secrets.MySQLpasswd }}" >> ./communication_ltd_secure/.env
+
+      - name: Create .env file (Vulnerable)
+        run: |
+          echo "MySQLuser=${{ secrets.MySQLuser }}" >> ./communication_ltd_vulnerable/.env
+          echo "MySQLpasswd=${{ secrets.MySQLpasswd }}" >> ./communication_ltd_vulnerable/.env
+
       - name: Build and push container image (Secure)
         run: |
           docker build -t hitacr.azurecr.io/hit-cyber-image-secure:latest ./communication_ltd_secure
