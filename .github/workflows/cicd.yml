@@ -43,13 +43,13 @@ jobs:
       - name: Create Web App (Secure) if not exists
         run: |
           if ! az webapp show --name hit-app-secure --resource-group HIT; then
-               az webapp create --name hit-app-secure --resource-group HIT --plan ASP-HIT-ba23
+               az webapp create --name hit-app-secure --resource-group HIT --plan ASP-HIT-ba23 --runtime "DOCKER|https://hitacr.azurecr.io/hit-cyber-image-vulnerable:latest"
           fi
   
       - name: Create Web App (Vulnerable) if not exists
         run: |
           if ! az webapp show --name hit-app-vulnerable --resource-group HIT; then
-               az webapp create --name hit-app-vulnerable --resource-group HIT --plan ASP-HIT-ba23
+               az webapp create --name hit-app-vulnerable --resource-group HIT --plan ASP-HIT-ba23 --runtime "DOCKER|https://hitacr.azurecr.io/hit-cyber-image-vulnerable:latest"
           fi
           
       - name: Deploy Web App from ACR (Secure)
