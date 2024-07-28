@@ -115,7 +115,7 @@ def login():
         password = request.form['password']
         
         cursor = cnx.cursor()
-        query = f"SELECT * FROM users_vulnerable WHERE username = '{username}' AND password = '{password}' LIMIT 1"
+        query = f"SELECT * FROM users_vulnerable WHERE (username = '{username}' ) AND (password = '{password}' ) LIMIT 1"
         logging.debug(f"Executing query: {query}")
         
         cursor.execute(query)
